@@ -1,9 +1,9 @@
 {
   "private": true,
-  "displayName": "Plugin Name",
-  "name": "homebridge-plugin-name",
+  "displayName": "Homebridge Roborock Control",
+  "name": "homebridge-roborock-control",
   "version": "1.0.0",
-  "description": "A short description about what your plugin does.",
+  "description": "A Homebridge plugin to control Roborock vacuum cleaners.",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
@@ -18,15 +18,23 @@
     "homebridge": "^1.8.0 || ^2.0.0-beta.0"
   },
   "main": "dist/index.js",
+  "bin": {
+    "homebridge-roborock-control": "bin/roborock-test.mjs"
+  },
   "scripts": {
     "lint": "eslint src/**/*.ts --max-warnings=0",
     "watch": "npm run build && npm link && nodemon",
     "build": "rimraf ./dist && tsc",
-    "prepublishOnly": "npm run lint && npm run build"
+    "prepublishOnly": "npm run lint && npm run build",
+    "postinstall": "python3 -m pip install python-roborock~=2.6.0 --target pylib --upgrade"
   },
   "keywords": [
     "homebridge-plugin"
   ],
+  "dependencies": {
+    "enquirer": "^2.4.1",
+    "pythonia": "^1.1.2"
+  },
   "devDependencies": {
     "@types/node": "^20.14.12",
     "@typescript-eslint/eslint-plugin": "^7.17.0",

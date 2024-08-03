@@ -121,3 +121,6 @@ dist
 
 # Webstorm
 .idea
+
+# Python libraries
+pylib
