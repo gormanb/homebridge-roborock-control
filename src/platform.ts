@@ -1,131 +1,137 @@
+/* eslint-disable indent */
 import {API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformConfig, Service} from 'homebridge';
 
-import {RoborockAccessory} from './platformAccessory.js';
+import {RoborockAccessory} from './accessories/roborockAccessory.js';
+import {makeRoborockDeviceClient, startRoborockSession} from './roborock/roborock-api.js';
 import {PLATFORM_NAME, PLUGIN_NAME} from './settings.js';
+import {Log} from './util/log.js';
+
+// How long we wait after a failed discovery attempt before retrying.
+const kDiscoveryRefreshInterval = 5000;
 
 /**
- * HomebridgePlatform
- * This class is the main constructor for your plugin, this is where you should
- * parse the user config and discover/register accessories with Homebridge.
+ * This class is the entry point for the plugin. It is responsible for parsing
+ * the user config, discovering accessories, and registering them.
  */
 export class RoborockControllerPlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service;
   public readonly Characteristic: typeof Characteristic;
 
-  // this is used to track restored cached accessories
-  public readonly accessories: PlatformAccessory[] = [];
+  // This array is used to track restored cached accessories.
+  public readonly cachedAccessories: PlatformAccessory[] = [];
+
+  // This array records the handlers which wrap each accessory.
+  public readonly accessoryHandlers: RoborockAccessory[] = [];
 
   constructor(
       public readonly log: Logging,
       public readonly config: PlatformConfig,
       public readonly api: API,
   ) {
+    // Configure the custom log with the Homebridge logger and debug config.
+    Log.configure(log, config.enableDebugLog);
+
     this.Service = api.hap.Service;
     this.Characteristic = api.hap.Characteristic;
 
-    this.log.debug('Finished initializing platform:', this.config.name);
+    // If the config is not valid, bail out immediately. We will not discover
+    // any new accessories or register any handlers for cached accessories.
+    const validationErrors = this.validateConfig(config);
+    if (validationErrors.length > 0) {
+      Log.error('Plugin suspended. Invalid configuration:', validationErrors);
+      return;
+    }
 
-    // When this event is fired it means Homebridge has restored all cached
-    // accessories from disk. Dynamic Platform plugins should only register new
-    // accessories after this event was fired, in order to ensure they weren't
-    // added to homebridge already. This event can also be used to start
-    // discovery of new accessories.
+    // Notify the user that we have completed platform initialization.
+    Log.debug('Finished initializing platform');
+
+    // This event is fired when Homebridge has restored all cached accessories.
+    // We must add handlers for these, and check for any new accessories.
     this.api.on('didFinishLaunching', () => {
-      log.debug('Executed didFinishLaunching callback');
-      // run the method to discover / register your devices as accessories
+      Log.debug('Finished restoring all cached accessories from disk');
       this.discoverDevices();
     });
   }
 
-  /**
-   * This function is invoked when homebridge restores cached accessories from
-   * disk at startup. It should be used to set up event handlers for
-   * characteristics and update respective values.
-   */
-  configureAccessory(accessory: PlatformAccessory) {
-    this.log.info('Loading accessory from cache:', accessory.displayName);
-
-    // add the restored accessory to the accessories cache, so we can track if
-    // it has already been registered
-    this.accessories.push(accessory);
+  // Validate that the plugin configuration conforms to the expected format.
+  private validateConfig(config: PlatformConfig): string[] {
+    const validationErrors: string[] = [];
+    if (!config.username) {
+      validationErrors.push('No Roborock username specified');
+    }
+    if (!config.password) {
+      validationErrors.push('No Roborock password specified');
+    }
+    return validationErrors;
   }
 
   /**
-   * This is an example method showing how to register discovered accessories.
-   * Accessories must only be registered once, previously created accessories
-   * must not be registered again to prevent "duplicate UUID" errors.
+   * This function is invoked for each cached accessory that homebridge restores
+   * from disk at startup. Here we add the cached accessories to a list which
+   * will be examined later during the 'discoverDevices' phase.
    */
-  discoverDevices() {
-    // EXAMPLE ONLY
-    // A real plugin you would discover accessories from the local network,
-    // cloud services or a user-defined array in the platform config.
-    const exampleDevices = [
-      {
-        exampleUniqueId: 'ABCD',
-        exampleDisplayName: 'Bedroom',
-      },
-      {
-        exampleUniqueId: 'EFGH',
-        exampleDisplayName: 'Kitchen',
-      },
-    ];
+  public configureAccessory(accessory: PlatformAccessory) {
+    Log.info('Loading accessory from cache:', accessory.displayName);
+    this.cachedAccessories.push(accessory);
+  }
 
-    // loop over the discovered devices and register each one if it has not
-    // already been registered
-    for (const device of exampleDevices) {
-      // generate a unique id for the accessory this should be generated from
-      // something globally unique, but constant, for example, the device serial
-      // number or MAC address
-      const uuid = this.api.hap.uuid.generate(device.exampleUniqueId);
+  /**
+   * Discover and register accessories. Accessories must only be registered
+   * once; previously created accessories must not be registered again, to
+   * avoid "duplicate UUID" errors.
+   */
+  private async discoverDevices() {
+    // Discover accessories. If we fail to discover anything, schedule another
+    // discovery attempt in the future.
+    const rrSession =
+        await startRoborockSession(this.config.username, this.config.password);
 
-      // see if an accessory with the same uuid has already been registered and
-      // restored from the cached devices we stored in the `configureAccessory`
-      // method above
-      const existingAccessory =
-          this.accessories.find(accessory => accessory.UUID === uuid);
+    if (!rrSession) {
+      Log.error('Login failed. Please check your credentials.');
+      return;
+    }
 
-      if (existingAccessory) {
-        // the accessory already exists
-        this.log.info(
-            'Restoring existing accessory from cache:',
-            existingAccessory.displayName);
+    const deviceList = await rrSession.home_data.get_all_devices();
+    Log.debug('Discovered devices:', deviceList);
 
-        // if you need to update the accessory.context then you should run
-        // `api.updatePlatformAccessories`. e.g.:
-        // existingAccessory.context.device = device;
-        // this.api.updatePlatformAccessories([existingAccessory]);
+    // Iterate over the discovered devices and create handlers for each.
+    for await (const device of deviceList) {
+      // Generate a unique id for the accessory from its device ID.
+      const uuid = this.api.hap.uuid.generate(await device['duid']);
+      const displayName = await device['name'];
 
-        // create the accessory handler for the restored accessory
-        // this is imported from `platformAccessory.ts`
-        new RoborockAccessory(this, existingAccessory);
+      // Try to create a client for the device, skip if it fails.
+      const rrClient = await makeRoborockDeviceClient(rrSession, device);
+      if (!rrClient) {
+        Log.info('Could not create client for device:', device);
+        continue;
+      }
 
-        // it is possible to remove platform accessories at any time using
-        // `api.unregisterPlatformAccessories`, e.g.: remove platform
-        // accessories when no longer present
-        // this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME,
-        // [existingAccessory]); this.log.info('Removing existing accessory from
-        // cache:', existingAccessory.displayName);
-      } else {
-        // the accessory does not yet exist, so we need to create it
-        this.log.info('Adding new accessory:', device.exampleDisplayName);
+      // See if an accessory with the same uuid already exists.
+      let accessory =
+          this.cachedAccessories.find(accessory => accessory.UUID === uuid);
 
-        // create a new accessory
-        const accessory =
-            new this.api.platformAccessory(device.exampleDisplayName, uuid);
-
-        // store a copy of the device object in the `accessory.context`
-        // the `context` property can be used to store any data about the
-        // accessory you may need
-        accessory.context.device = device;
-
-        // create the accessory handler for the newly create accessory
-        // this is imported from `platformAccessory.ts`
-        new RoborockAccessory(this, accessory);
-
-        // link the accessory to your platform
+      // If the accessory does not yet exist, we need to create it.
+      if (!accessory) {
+        Log.info('Adding new accessory:', displayName);
+        accessory = new this.api.platformAccessory(displayName, uuid);
         this.api.registerPlatformAccessories(
             PLUGIN_NAME, PLATFORM_NAME, [accessory]);
       }
+
+      // Make sure the accessory stays in sync with any device config changes.
+      accessory.context.device = device;
+      this.api.updatePlatformAccessories([accessory]);
+
+      // Create the accessory handler for this accessory.
+      this.accessoryHandlers.push(
+          new RoborockAccessory(this, accessory, rrClient));
+    }
+
+    if (this.accessoryHandlers.length === 0) {
+      Log.warn(
+          'Failed to find devices. Retry in', kDiscoveryRefreshInterval, 'ms');
+      setTimeout(() => this.discoverDevices(), kDiscoveryRefreshInterval);
     }
   }
 }

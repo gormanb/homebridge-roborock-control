@@ -3,14 +3,44 @@
   "pluginType": "platform",
   "singular": true,
   "schema": {
-    "type": "object",
-    "properties": {
-      "name": {
-        "title": "Name",
-        "type": "string",
-        "required": true,
-        "default": "Example Dynamic Platform"
-      }
+    "username": {
+      "title": "Username",
+      "type": "string",
+      "format": "email",
+      "required": true
+    },
+    "password": {
+      "title": "Password",
+      "type": "string",
+      "required": true
+    },
+    "enableDebugLog": {
+      "title": "Debug Logging",
+      "type": "boolean",
+      "default": false
     }
-  }
+  },
+  "layout": [
+    {
+      "key": "user_credentials",
+      "title": "User Credentials",
+      "type": "section",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "username",
+        "password"
+      ]
+    },
+    {
+      "key": "debug_options",
+      "title": "Debug Options",
+      "type": "section",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "enableDebugLog"
+      ]
+    }
+  ]
 }

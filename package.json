@@ -26,7 +26,7 @@
     "watch": "npm run build && npm link && nodemon",
     "build": "rimraf ./dist && tsc",
     "prepublishOnly": "npm run lint && npm run build",
-    "postinstall": "python3 -m pip install python-roborock~=2.6.0 --target pylib --upgrade"
+    "postinstall": "python3 -m pip install python-roborock~=2.6.0 pyshark --target pylib --upgrade"
   },
   "keywords": [
     "homebridge-plugin"
