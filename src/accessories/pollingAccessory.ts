@@ -1,21 +1,20 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable indent */
 import {PlatformAccessory, PlatformConfig} from 'homebridge';
+import {PlatformPlugin} from 'homebridge/lib/api.js';
 
-import {RoborockControllerPlatform} from '../platform.js';
 import {Log} from '../util/log.js';
 
 /**
  * Base class to implement common polling functionality for accessories.
  */
-export class PollingAccessory {
+export class PollingAccessory<DeviceState> {
   protected static readonly kDefaultRefreshInterval = 5000;
 
-  private _currentState: any = {};
+  private _currentState: DeviceState = <DeviceState>{};
 
   constructor(
-      protected readonly platform: RoborockControllerPlatform,
+      protected readonly platform: PlatformPlugin,
       protected readonly accessory: PlatformAccessory,
       protected readonly refreshInterval:
           number = PollingAccessory.kDefaultRefreshInterval,
@@ -46,7 +45,7 @@ export class PollingAccessory {
   }
 
   // Returns a clone of the current state object.
-  protected currentState(): any {
+  protected currentState(): DeviceState {
     return structuredClone(this._currentState);
   }
 
@@ -56,12 +55,12 @@ export class PollingAccessory {
   }
 
   // Implemented by subclasses. Returns an object with the current device state.
-  protected async getDeviceState(lastState: any): Promise<any> {
-    // TBI
+  protected async getDeviceState(lastState: DeviceState): Promise<DeviceState> {
+    return <DeviceState>{};
   }
 
   // Implemented by subclasses. Updates Homekit with the current state.
-  protected async updateHomekitState(currentState: any) {
+  protected async updateHomekitState(currentState: DeviceState) {
     // TBI
   }
 }

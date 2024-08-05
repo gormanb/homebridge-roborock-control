@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable indent */
 import {PlatformAccessory, Service} from 'homebridge';
 
@@ -14,10 +13,22 @@ const kFanPower = 'fan_power';
 const kBattery = 'battery';
 const kCharging = 'charge_status';
 
+// An interface representing the device's state.
+interface DeviceState {
+  [kActive]: number;
+  [kFanPower]: number;
+  [kBattery]: number;
+  [kCharging]: number;
+}
+
+// Command constants for the vacuum.
+const kStartCleaning = 'app_start';
+const kStopCleaning = 'app_charge';
+
 /**
  * An instance of this class is created for each Roborock accessory.
  */
-export class RoborockAccessory extends PollingAccessory {
+export class RoborockAccessory extends PollingAccessory<DeviceState> {
   private batteryService: Service;
   private fanService: Service;
 
@@ -56,7 +67,7 @@ export class RoborockAccessory extends PollingAccessory {
 
   // Update the vacuum's state and make sure the change is reflected in Homekit.
   private async setDeviceState(active: boolean) {
-    await this.rrClient.sendCommand(active ? 'app_start' : 'app_charge');
+    await this.rrClient.sendCommand(active ? kStartCleaning : kStopCleaning);
     Log.debug(`Setting vacuum state to ${active ? 'active' : 'inactive'}`);
     this.refreshDeviceState();
   }
@@ -71,18 +82,18 @@ export class RoborockAccessory extends PollingAccessory {
   }
 
   // Obtain and return the device's current state.
-  protected async getDeviceState(lastState: any): Promise<any> {
-    const deviceState = await this.rrClient.getStatus();
+  protected async getDeviceState(lastState: DeviceState): Promise<DeviceState> {
+    const rawDeviceState = await this.rrClient.getStatus();
     return {
-      [kActive]: await deviceState[kActive],
-      [kFanPower]: await deviceState[kFanPower],
-      [kBattery]: await deviceState[kBattery],
-      [kCharging]: await deviceState[kCharging],
+      [kActive]: await rawDeviceState[kActive],
+      [kFanPower]: await rawDeviceState[kFanPower],
+      [kBattery]: await rawDeviceState[kBattery],
+      [kCharging]: await rawDeviceState[kCharging],
     };
   }
 
   // Push the current state to Homekit.
-  protected async updateHomekitState(currentState: any) {
+  protected async updateHomekitState(currentState: DeviceState) {
     this.fanService.updateCharacteristic(
         this.platform.Characteristic.On, currentState[kActive]);
     this.batteryService.updateCharacteristic(
