@@ -14,24 +14,28 @@ process.on('exit', () => python.exit());
 const __dirname = dirname(fileURLToPath(import.meta.url));
 await (await python('sys')).path.append(join(__dirname, '..', '..', 'pylib'));
 
-export const [pyroborock, pyasyncio] =
-    [await python('roborock.cli'), await python('asyncio')];
+export const [pyroborock, pyrrcontainers, pyasyncio] = [
+  await python('roborock.cli'),
+  await python('roborock.containers'),
+  await python('asyncio'),
+];
 
 // Returns a roborock.containers.LoginData with email, user and home data.
-export async function startRoborockSession(username: string, password: string) {
+export async function startRoborockSession(
+    username: string, password: string, pyUserData: any) {
   // Create a session, log in, and retrieve the user's home data.
   const cloudConn = await pyroborock.RoborockApiClient(username);
   const rrSession = await pyroborock.LoginData(null, username);
   try {
     rrSession.user_data =
-        await pyasyncio.run(await cloudConn.pass_login(password));
+        pyUserData || await pyasyncio.run(await cloudConn.pass_login(password));
     rrSession.home_data = await pyasyncio.run(
         await cloudConn.get_home_data(await rrSession.user_data));
+    return rrSession;
   } catch (ex) {
     Log.info('Failed to start Roborock session:', ex);
-    return null;
   }
-  return rrSession;
+  return null;
 }
 
 export class RoborockDeviceClient {

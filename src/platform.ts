@@ -5,6 +5,7 @@ import {RoborockAccessory} from './accessories/roborockAccessory.js';
 import {makeRoborockDeviceClient, startRoborockSession} from './roborock/roborock-api.js';
 import {PLATFORM_NAME, PLUGIN_NAME} from './settings.js';
 import {Log} from './util/log.js';
+import {readUserData, writeUserData} from './util/user-cache.js';
 
 // How long we wait after a failed discovery attempt before retrying.
 const kDiscoveryRefreshInterval = 5000;
@@ -81,15 +82,22 @@ export class RoborockControllerPlatform implements DynamicPlatformPlugin {
    * avoid "duplicate UUID" errors.
    */
   private async discoverDevices() {
+    // Attempt to load cached userData from persistent storage.
+    const userData = await readUserData(this.api, this.config.username);
+    Log.debug('Loaded userData:', userData);
+
     // Discover accessories. If we fail to discover anything, schedule another
     // discovery attempt in the future.
-    const rrSession =
-        await startRoborockSession(this.config.username, this.config.password);
+    const rrSession = await startRoborockSession(
+        this.config.username, this.config.password, userData);
 
     if (!rrSession) {
       Log.error('Login failed. Please check your credentials.');
       return;
     }
+
+    // Write the user data out to persistent storage.
+    writeUserData(this.api, rrSession);
 
     const deviceList = await rrSession.home_data.get_all_devices();
     Log.debug('Discovered devices:', deviceList);
