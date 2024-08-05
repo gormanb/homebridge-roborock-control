@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable indent */
 import {dirname, join} from 'path';
 import {python} from 'pythonia';

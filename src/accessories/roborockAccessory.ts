@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable indent */
 import {PlatformAccessory, Service} from 'homebridge';
@@ -6,7 +7,7 @@ import {RoborockControllerPlatform} from '../platform';
 import {RoborockDeviceClient} from '../roborock/roborock-api';
 import {Log} from '../util/log.js';
 
-import {BaseAccessory} from './baseAccessory.js';
+import {PollingAccessory} from './pollingAccessory.js';
 
 const kActive = 'in_cleaning';
 const kFanPower = 'fan_power';
@@ -16,7 +17,7 @@ const kCharging = 'charge_status';
 /**
  * An instance of this class is created for each Roborock accessory.
  */
-export class RoborockAccessory extends BaseAccessory {
+export class RoborockAccessory extends PollingAccessory {
   private batteryService: Service;
   private fanService: Service;
 
@@ -49,38 +50,44 @@ export class RoborockAccessory extends BaseAccessory {
     // Register handlers for all dynamic characteristics.
     //
     this.fanService.getCharacteristic(Characteristic.On)
-        .onGet(() => !!this.currentState[kActive])
+        .onGet(() => !!this.currentState()[kActive])
         .onSet((active) => this.setDeviceState(!!active));
   }
+
+  // Update the vacuum's state and make sure the change is reflected in Homekit.
+  private async setDeviceState(active: boolean) {
+    await this.rrClient.sendCommand(active ? 'app_start' : 'app_charge');
+    Log.debug(`Setting vacuum state to ${active ? 'active' : 'inactive'}`);
+    this.refreshDeviceState();
+  }
+
+  //
+  // Implementations of virtual superclass methods.
+  //
 
   // Return true if services have been initialized.
   protected servicesReady(): boolean {
     return !!(this.fanService && this.batteryService);
   }
 
-  // Get the device power state and push to Homekit when it changes.
-  protected async updateDeviceAndCurrentState() {
+  // Obtain and return the device's current state.
+  protected async getDeviceState(lastState: any): Promise<any> {
     const deviceState = await this.rrClient.getStatus();
-    this.currentState[kActive] = await deviceState[kActive];
-    this.currentState[kFanPower] = await deviceState[kFanPower];
-    this.currentState[kBattery] = await deviceState[kBattery];
-    this.currentState[kCharging] = await deviceState[kCharging];
+    return {
+      [kActive]: await deviceState[kActive],
+      [kFanPower]: await deviceState[kFanPower],
+      [kBattery]: await deviceState[kBattery],
+      [kCharging]: await deviceState[kCharging],
+    };
   }
 
   // Push the current state to Homekit.
-  protected async updateHomekitState() {
+  protected async updateHomekitState(currentState: any) {
     this.fanService.updateCharacteristic(
-        this.platform.Characteristic.On, this.currentState[kActive]);
+        this.platform.Characteristic.On, currentState[kActive]);
     this.batteryService.updateCharacteristic(
-        this.platform.Characteristic.BatteryLevel, this.currentState[kBattery]);
+        this.platform.Characteristic.BatteryLevel, currentState[kBattery]);
     this.batteryService.updateCharacteristic(
-        this.platform.Characteristic.ChargingState,
-        this.currentState[kCharging]);
-  }
-
-  private async setDeviceState(active: boolean) {
-    await this.rrClient.sendCommand(active ? 'app_start' : 'app_charge');
-    Log.debug(`Set vacuum to active: ${active}`);
-    this.updateDeviceAndCurrentState();
+        this.platform.Characteristic.ChargingState, currentState[kCharging]);
   }
 }
