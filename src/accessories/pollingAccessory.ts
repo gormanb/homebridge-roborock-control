@@ -9,7 +9,7 @@ import {Log} from '../util/log.js';
  * Base class to implement common polling functionality for accessories.
  */
 export class PollingAccessory<DeviceState> {
-  protected static readonly kDefaultRefreshInterval = 5000;
+  protected static readonly kDefaultRefreshInterval = 10000;
 
   private _currentState: DeviceState = <DeviceState>{};
 

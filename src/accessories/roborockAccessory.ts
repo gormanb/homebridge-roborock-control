@@ -3,32 +3,34 @@
 import {PlatformAccessory, Service} from 'homebridge';
 
 import {RoborockControllerPlatform} from '../platform';
-import {RoborockDeviceClient} from '../roborock/roborock-api';
+import {PyRoborockCmd, PyRoborockState, RoborockDeviceClient} from '../roborock/roborock-api.js';
 import {Log} from '../util/log.js';
 
 import {PollingAccessory} from './pollingAccessory.js';
 
-const kActive = 'in_cleaning';
+const kVacuumState = 'state';
 const kFanPower = 'fan_power';
-const kBattery = 'battery';
-const kCharging = 'charge_status';
+const kBatteryLevel = 'battery';
+const kCleaning = 'is_cleaning';
+const kLowBattery = 'is_low_battery';
+const kCharging = 'is_charging';
 
 // An interface representing the device's state.
 interface DeviceState {
-  [kActive]: number;
+  [kVacuumState]: number;
   [kFanPower]: number;
-  [kBattery]: number;
-  [kCharging]: number;
+  [kBatteryLevel]: number;
+  [kCleaning]: boolean;
+  [kLowBattery]: boolean;
+  [kCharging]: boolean;
 }
-
-// Command constants for the vacuum.
-const kStartCleaning = 'app_start';
-const kStopCleaning = 'app_charge';
 
 /**
  * An instance of this class is created for each Roborock accessory.
  */
 export class RoborockAccessory extends PollingAccessory<DeviceState> {
+  private static kLowBatteryPercent = 15;
+
   private batteryService: Service;
   private fanService: Service;
 
@@ -39,9 +41,6 @@ export class RoborockAccessory extends PollingAccessory<DeviceState> {
   ) {
     // Initialize the base class first, then initialize the services.
     super(platform, accessory);
-
-    // Convenience references to Characteristic and Service.
-    const Characteristic = this.platform.Characteristic;
 
     //
     // Create a Fan to control the main vacuum function.
@@ -58,17 +57,39 @@ export class RoborockAccessory extends PollingAccessory<DeviceState> {
         this.accessory.addService(this.platform.Service.Battery);
 
     //
-    // Register handlers for all dynamic characteristics.
+    // Set up the handlers for each service and characteristic.
     //
+    this.setupHandlers();
+  }
+
+  private async setupHandlers() {
+    // Convenience references to Characteristic and Service.
+    const Characteristic = this.platform.Characteristic;
+
+    // Perform a refresh of the device to establish the initial state.
+    await this.refreshDeviceState();
+
+    // Register handlers for all dynamic characteristics.
     this.fanService.getCharacteristic(Characteristic.On)
-        .onGet(() => !!this.currentState()[kActive])
+        .onGet(() => this.currentState()[kCleaning])
         .onSet((active) => this.setDeviceState(!!active));
+
+    this.batteryService.getCharacteristic(Characteristic.BatteryLevel)
+        .onGet(() => this.currentState()[kBatteryLevel]);
+
+    this.batteryService.getCharacteristic(Characteristic.ChargingState)
+        .onGet(() => this.currentState()[kCharging]);
+
+    this.batteryService.getCharacteristic(Characteristic.StatusLowBattery)
+        .onGet(() => this.currentState()[kLowBattery]);
   }
 
   // Update the vacuum's state and make sure the change is reflected in Homekit.
   private async setDeviceState(active: boolean) {
-    await this.rrClient.sendCommand(active ? kStartCleaning : kStopCleaning);
     Log.debug(`Setting vacuum state to ${active ? 'active' : 'inactive'}`);
+    await this.rrClient.sendCommand(
+        active ? await PyRoborockCmd.APP_START :
+                 await PyRoborockCmd.APP_CHARGE);
     this.refreshDeviceState();
   }
 
@@ -84,20 +105,29 @@ export class RoborockAccessory extends PollingAccessory<DeviceState> {
   // Obtain and return the device's current state.
   protected async getDeviceState(lastState: DeviceState): Promise<DeviceState> {
     const rawDeviceState = await this.rrClient.getStatus();
-    return {
-      [kActive]: await rawDeviceState[kActive],
+    const devState = <DeviceState>{
+      [kVacuumState]: await rawDeviceState[kVacuumState],
       [kFanPower]: await rawDeviceState[kFanPower],
-      [kBattery]: await rawDeviceState[kBattery],
-      [kCharging]: await rawDeviceState[kCharging],
+      [kBatteryLevel]: await rawDeviceState[kBatteryLevel],
     };
+    devState[kCleaning] =
+        (devState[kVacuumState] === await PyRoborockState.cleaning.valueOf());
+    devState[kLowBattery] =
+        (devState[kBatteryLevel] <= RoborockAccessory.kLowBatteryPercent);
+    devState[kCharging] =
+        (devState[kVacuumState] === await PyRoborockState.charging.valueOf());
+    return devState;
   }
 
   // Push the current state to Homekit.
   protected async updateHomekitState(currentState: DeviceState) {
     this.fanService.updateCharacteristic(
-        this.platform.Characteristic.On, currentState[kActive]);
+        this.platform.Characteristic.On, currentState[kCleaning]);
     this.batteryService.updateCharacteristic(
-        this.platform.Characteristic.BatteryLevel, currentState[kBattery]);
+        this.platform.Characteristic.BatteryLevel, currentState[kBatteryLevel]);
+    this.batteryService.updateCharacteristic(
+        this.platform.Characteristic.StatusLowBattery,
+        currentState[kLowBattery]);
     this.batteryService.updateCharacteristic(
         this.platform.Characteristic.ChargingState, currentState[kCharging]);
   }

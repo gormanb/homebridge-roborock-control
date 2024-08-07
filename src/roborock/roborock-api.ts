@@ -21,6 +21,10 @@ export const pyasyncio = await python('asyncio');
 export const pyroborock =
     await python(join(__dirname, '..', 'python', 'pyimport.py'));
 
+// State codes and commands for the vacuum from the python library.
+export const PyRoborockState = await pyroborock.RoborockStateCode;
+export const PyRoborockCmd = await pyroborock.RoborockCommand;
+
 // Returns a roborock.containers.LoginData with email, user and home data.
 export async function startRoborockSession(
     username: string, password: string, pyUserData: any) {
@@ -39,11 +43,12 @@ export async function startRoborockSession(
   return null;
 }
 
+// Class which wraps the python library to communicate with the vacuum.
 export class RoborockDeviceClient {
   constructor(private readonly rrRawClient: any) {}
 
   public async getStatus() {
-    return await this.sendCommand('get_status');
+    return await this.sendCommand(await PyRoborockCmd.GET_STATUS);
   }
 
   public async sendCommand(cmd: string, args?: any) {
