@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import {API} from 'homebridge';
 import {join} from 'path';
 
-import {pyroborock, pyrrcontainers} from '../roborock/roborock-api.js';
+import {pyroborock} from '../roborock/roborock-api.js';
 import {PLUGIN_NAME} from '../settings.js';
 
 import {Log} from './log.js';
@@ -30,7 +30,7 @@ export async function readUserData(api: API, email: string) {
   Log.debug('Reading userData from ', filePath);
   try {
     const userJson = fs.readFileSync(filePath).toString();
-    return await pyrrcontainers.UserData.from_dict(
+    return await pyroborock.UserData.from_dict(
         await pyroborock.json.loads(userJson));
   } catch (ex) {
     Log.debug(`Failed to read userData from ${filePath}:`, ex);

@@ -12,13 +12,14 @@ process.on('exit', () => python.exit());
 
 // Get the path of the directory where this file is located.
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Append the 'pylib' path to the python search path.
 await (await python('sys')).path.append(join(__dirname, '..', '..', 'pylib'));
 
-export const [pyroborock, pyrrcontainers, pyasyncio] = [
-  await python('roborock.cli'),
-  await python('roborock.containers'),
-  await python('asyncio'),
-];
+// Load asyncio and roborock packages via the python bridge.
+export const pyasyncio = await python('asyncio');
+export const pyroborock =
+    await python(join(__dirname, '..', 'python', 'pyimport.py'));
 
 // Returns a roborock.containers.LoginData with email, user and home data.
 export async function startRoborockSession(
