@@ -28,19 +28,26 @@ export const PyRoborockCmd = await pyroborock.RoborockCommand;
 // Returns a roborock.containers.LoginData with email, user and home data.
 export async function startRoborockSession(
     username: string, password: string, pyUserData: any) {
-  // Create a session, log in, and retrieve the user's home data.
+  // Create a client to communicate with the cloud service.
   const cloudConn = await pyroborock.RoborockApiClient(username);
-  const rrSession = await pyroborock.LoginData(null, username);
-  try {
-    rrSession.user_data =
-        pyUserData || await pyasyncio.run(await cloudConn.pass_login(password));
-    rrSession.home_data = await pyasyncio.run(
-        await cloudConn.get_home_data(await rrSession.user_data));
-    return rrSession;
-  } catch (ex) {
-    Log.info('Failed to start Roborock session:', ex);
-  }
-  return null;
+  // Helper function to build a LoginData object for this session.
+  const tryLoginWithUserData = async (userData: any) => {
+    const rrSession = await pyroborock.LoginData(null, username);
+    try {
+      !userData && Log.debug('Missing or expired token data, refreshing login');
+      rrSession.user_data =
+          userData || await pyasyncio.run(await cloudConn.pass_login(password));
+      rrSession.home_data = await pyasyncio.run(
+          await cloudConn.get_home_data(await rrSession.user_data));
+      return rrSession;
+    } catch (ex) {
+      Log.info('Error while logging in:', ex);
+      return null;
+    }
+  };
+  // Try to log in with the restored user data. If it fails, then force a
+  // refresh of the user data nd try to log in again.
+  return tryLoginWithUserData(pyUserData) || tryLoginWithUserData(null);
 }
 
 // Class which wraps the python library to communicate with the vacuum.
