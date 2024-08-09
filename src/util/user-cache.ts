@@ -24,14 +24,24 @@ export async function writeUserData(api: API, pyLoginData: any) {
   }
 }
 
+// Helper function to convert a JSON string to UserData object.
+export async function toPyUserData(userJson: string) {
+  try {
+    return await pyroborock.UserData.from_dict(
+        await pyroborock.json.loads(userJson));
+  } catch (ex) {
+    Log.debug('Invalid UserData JSON:', ex);
+  }
+  return null;
+}
+
 // Read LoginData.user_data from persistent storage and deserialize it.
 export async function readUserData(api: API, email: string) {
   const filePath = join(api.user.storagePath(), PLUGIN_NAME, email);
   Log.debug('Reading userData from ', filePath);
   try {
     const userJson = fs.readFileSync(filePath).toString();
-    return await pyroborock.UserData.from_dict(
-        await pyroborock.json.loads(userJson));
+    return await toPyUserData(userJson);
   } catch (ex) {
     Log.debug(`Failed to read userData from ${filePath}:`, ex);
   }

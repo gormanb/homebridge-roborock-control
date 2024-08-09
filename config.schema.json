@@ -9,10 +9,42 @@
       "format": "email",
       "required": true
     },
+    "authMode": {
+      "title": "Auth Mode",
+      "type": "string",
+      "default": "password",
+      "oneOf": [
+        {
+          "title": "Password",
+          "enum": [
+            "password"
+          ]
+        },
+        {
+          "title": "One-Time Code",
+          "enum": [
+            "otp"
+          ]
+        }
+      ],
+      "required": true
+    },
     "password": {
       "title": "Password",
       "type": "string",
-      "required": true
+      "condition": {
+        "functionBody": "return model.authMode === 'password'"
+      },
+      "required": false
+    },
+    "otpLogin": {
+      "title": "One-Time Code Login",
+      "description": "Run 'npx homebridge-roborock-control' and follow the instructions",
+      "type": "string",
+      "condition": {
+        "functionBody": "return model.authMode === 'otp'"
+      },
+      "required": false
     },
     "enableDebugLog": {
       "title": "Debug Logging",
@@ -26,10 +58,12 @@
       "title": "User Credentials",
       "type": "section",
       "expandable": true,
-      "expanded": false,
+      "expanded": true,
       "items": [
         "username",
-        "password"
+        "authMode",
+        "password",
+        "otpLogin"
       ]
     },
     {

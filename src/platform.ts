@@ -4,8 +4,9 @@ import {API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAccessory, 
 import {RoborockAccessory} from './accessories/roborockAccessory.js';
 import {makeRoborockDeviceClient, startRoborockSession} from './roborock/roborock-api.js';
 import {PLATFORM_NAME, PLUGIN_NAME} from './settings.js';
+import {tryParse} from './util/helpers.js';
 import {Log} from './util/log.js';
-import {readUserData, writeUserData} from './util/user-cache.js';
+import {readUserData, toPyUserData, writeUserData} from './util/user-cache.js';
 
 // How long we wait after a failed discovery attempt before retrying.
 const kDiscoveryRefreshInterval = 5000;
@@ -58,10 +59,16 @@ export class RoborockControllerPlatform implements DynamicPlatformPlugin {
   private validateConfig(config: PlatformConfig): string[] {
     const validationErrors: string[] = [];
     if (!config.username) {
-      validationErrors.push('No Roborock username specified');
+      validationErrors.push('No username specified in config');
     }
-    if (!config.password) {
-      validationErrors.push('No Roborock password specified');
+    if (config.authMode === 'password' && !config.password) {
+      validationErrors.push('No password specified in config');
+    }
+    if (config.authMode === 'otp' && !config.otpLogin) {
+      validationErrors.push('No one-time-code login details specified');
+    }
+    if (config.authMode === 'otp' && !tryParse(config.otpLogin)) {
+      validationErrors.push('Invalid one-time-code login details');
     }
     return validationErrors;
   }
@@ -83,13 +90,17 @@ export class RoborockControllerPlatform implements DynamicPlatformPlugin {
    */
   private async discoverDevices() {
     // Attempt to load cached userData from persistent storage.
-    const userData = await readUserData(this.api, this.config.username);
+    const userData = this.config.authMode === 'otp' ?
+        await toPyUserData(this.config.otpLogin) :
+        await readUserData(this.api, this.config.username);
+
     Log.debug('Loaded userData:', userData);
 
     // Discover accessories. If we fail to discover anything, schedule another
     // discovery attempt in the future.
     const rrSession = await startRoborockSession(
-        this.config.username, this.config.password, userData);
+        this.config.username, this.config.authMode, this.config.password,
+        userData);
 
     if (!rrSession) {
       Log.error('Login failed. Please check your credentials.');

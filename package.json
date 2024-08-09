@@ -19,7 +19,7 @@
   },
   "main": "dist/index.js",
   "bin": {
-    "homebridge-roborock-control": "bin/roborock-test.mjs"
+    "homebridge-roborock-control": "bin/roborock-otp.mjs"
   },
   "scripts": {
     "lint": "eslint src/**/*.ts --max-warnings=0",

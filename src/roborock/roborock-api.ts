@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable indent */
+import assert from 'node:assert';
 import {dirname, join} from 'path';
 import {python} from 'pythonia';
 import {fileURLToPath} from 'url';
@@ -27,12 +28,29 @@ export const PyRoborockCmd = await pyroborock.RoborockCommand;
 
 // Returns a roborock.containers.LoginData with email, user and home data.
 export async function startRoborockSession(
-    username: string, password: string, pyUserData: any) {
+    username: string, authMode: string, password: string, pyUserData: any) {
   // Create a client to communicate with the cloud service.
   const cloudConn = await pyroborock.RoborockApiClient(username);
-  // Helper function to build a LoginData object for this session.
-  const tryLoginWithUserData = async (userData: any) => {
-    const rrSession = await pyroborock.LoginData(null, username);
+
+  // The session object that will be returned to the client.
+  const rrSession = await pyroborock.LoginData(null, username);
+
+  // Handle the situation where the user has requested OTP login.
+  if (authMode === 'otp') {
+    try {
+      assert(pyUserData);
+      rrSession.user_data = pyUserData;
+      rrSession.home_data = await pyasyncio.run(
+          await cloudConn.get_home_data(await rrSession.user_data));
+      return rrSession;
+    } catch (ex) {
+      Log.error('Invalid or expired one-time-code login data:', ex);
+      Log.error('Update the config and restart the plugin.');
+      return null;
+    }
+  }
+  // If we're here, then the user has requested password login.
+  const tryPasswdLogin = async (userData: any) => {
     try {
       !userData && Log.debug('Missing or expired token data, refreshing login');
       rrSession.user_data =
@@ -46,8 +64,8 @@ export async function startRoborockSession(
     }
   };
   // Try to log in with the restored user data. If it fails, then force a
-  // refresh of the user data nd try to log in again.
-  return tryLoginWithUserData(pyUserData) || tryLoginWithUserData(null);
+  // refresh of the user data and try to log in again.
+  return tryPasswdLogin(pyUserData) || tryPasswdLogin(null);
 }
 
 // Class which wraps the python library to communicate with the vacuum.
