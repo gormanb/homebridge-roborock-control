@@ -2,7 +2,7 @@
 import {API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformConfig, Service} from 'homebridge';
 
 import {RoborockAccessory} from './accessories/roborockAccessory.js';
-import {makeRoborockDeviceClient, startRoborockSession} from './roborock/roborock-api.js';
+import {getProductForDevice, isVacuumDevice, makeRoborockDeviceClient, startRoborockSession} from './roborock/roborock-api.js';
 import {PLATFORM_NAME, PLUGIN_NAME} from './settings.js';
 import {tryParse} from './util/helpers.js';
 import {Log} from './util/log.js';
@@ -115,12 +115,20 @@ export class RoborockControllerPlatform implements DynamicPlatformPlugin {
 
     // Iterate over the discovered devices and create handlers for each.
     for await (const device of deviceList) {
+      // Obtain the product info for this device and check that it's a vacuum.
+      const product = await getProductForDevice(device, rrSession);
+      if (!product || !await isVacuumDevice(product)) {
+        Log.info(`Device '${await device.name}' is not a vacuum, skipping`);
+        continue;
+      }
+
       // Generate a unique id for the accessory from its device ID.
       const uuid = this.api.hap.uuid.generate(await device['duid']);
       const displayName = await device['name'];
 
       // Try to create a client for the device, skip if it fails.
-      const rrClient = await makeRoborockDeviceClient(rrSession, device);
+      const rrClient = await makeRoborockDeviceClient(
+          await rrSession.user_data, device, product);
       if (!rrClient) {
         Log.info('Could not create client for device:', device);
         continue;

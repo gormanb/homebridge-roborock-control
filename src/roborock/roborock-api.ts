@@ -5,6 +5,7 @@ import {dirname, join} from 'path';
 import {python} from 'pythonia';
 import {fileURLToPath} from 'url';
 
+import {tryParse} from '../util/helpers.js';
 import {Log} from '../util/log.js';
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -25,6 +26,36 @@ export const pyroborock =
 // State codes and commands for the vacuum from the python library.
 export const PyRoborockState = await pyroborock.RoborockStateCode;
 export const PyRoborockCmd = await pyroborock.RoborockCommand;
+
+// Product categories which correspond to robot vacuum devices.
+const kVacuumCategories = {
+  VACUUM: 'robot.vacuum.cleaner',
+};
+
+// Enum of known protocol versions.
+enum ProtocolVersion {
+  V1 = '1.0',
+  A01 = 'A01'
+}
+
+// For a given device, retrieve the corresponding product catalog entry.
+export async function getProductForDevice(device: any, rrSession: any) {
+  const productId = await device.product_id;
+  for await (const product of await rrSession.home_data.products) {
+    if (await product.id === productId) {
+      return product;
+    }
+  }
+  Log.debug(`No product info found for device ${await device.name}`);
+  return null;
+}
+
+// Determine whether the device is a vacuum based on product category.
+export async function isVacuumDevice(product: any) {
+  const productJson =
+      tryParse(await pyroborock.json.dumps(await product.as_dict()));
+  return Object.values(kVacuumCategories).includes(productJson?.category);
+}
 
 // Returns a roborock.containers.LoginData with email, user and home data.
 export async function startRoborockSession(
@@ -82,17 +113,19 @@ export class RoborockDeviceClient {
 }
 
 // Create an MqttClient to communicate with the vacuum.
-export async function makeRoborockDeviceClient(rrSession: any, device: any) {
-  const productId = await device.product_id;
-  for await (const product of await rrSession.home_data.products) {
-    if (await product.id === productId) {
-      const deviceData =
-          await pyroborock.DeviceData(device, await product.model);
-      const rrRawClient = await pyroborock.RoborockMqttClientV1(
-          await rrSession.user_data, deviceData);
-      return new RoborockDeviceClient(rrRawClient);
-    }
+export async function makeRoborockDeviceClient(
+    userData: any, device: any, product: any) {
+  const deviceData = await pyroborock.DeviceData(device, await product.model);
+  const protocolVersion = await device.pv;
+  switch (protocolVersion) {
+    case ProtocolVersion.V1:
+      return new RoborockDeviceClient(
+          await pyroborock.RoborockMqttClientV1(userData, deviceData));
+    case ProtocolVersion.A01:  // NYI
+    // eslint-disable-next-line no-fallthrough
+    default:
+      Log.info(
+          `Unknown protocol '${protocolVersion}' for '${await device.name}'`);
   }
-  Log.debug('Could not find device model for:', device);
   return null;
 }
