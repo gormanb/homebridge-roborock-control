@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable indent */
 import {PlatformAccessory, Service} from 'homebridge';
@@ -8,12 +9,17 @@ import {Log} from '../util/log.js';
 
 import {PollingAccessory} from './pollingAccessory.js';
 
+// Names of properties present in the DeviceState.
 const kVacuumState = 'state';
 const kFanPower = 'fan_power';
 const kBatteryLevel = 'battery';
 const kCleaning = 'is_cleaning';
 const kLowBattery = 'is_low_battery';
 const kCharging = 'is_charging';
+
+// Type union of all property names present in the DeviceState.
+type DeviceProperty = typeof kVacuumState|typeof kFanPower|typeof kBatteryLevel|
+    typeof kCleaning|typeof kLowBattery|typeof kCharging;
 
 // An interface representing the device's state.
 interface DeviceState {
@@ -71,25 +77,39 @@ export class RoborockAccessory extends PollingAccessory<DeviceState> {
 
     // Register handlers for all dynamic characteristics.
     this.fanService.getCharacteristic(Characteristic.On)
-        .onGet(() => this.currentState()[kCleaning])
+        .onGet(() => this.getProperty(kCleaning))
         .onSet((active) => this.setDeviceState(!!active));
 
     this.batteryService.getCharacteristic(Characteristic.BatteryLevel)
-        .onGet(() => this.currentState()[kBatteryLevel]);
+        .onGet(() => this.getProperty(kBatteryLevel));
 
     this.batteryService.getCharacteristic(Characteristic.ChargingState)
-        .onGet(() => this.currentState()[kCharging]);
+        .onGet(() => this.getProperty(kCharging));
 
     this.batteryService.getCharacteristic(Characteristic.StatusLowBattery)
-        .onGet(() => this.currentState()[kLowBattery]);
+        .onGet(() => this.getProperty(kLowBattery));
+  }
+
+  // Checks the given property and throws an exception if it is undefined. Used
+  // by getters to detect a communication failure.
+  private getProperty(propertyName: DeviceProperty) {
+    const propertyValue = this.currentState()[propertyName];
+    if (propertyValue === undefined) {
+      throw new this.platform.api.hap.HapStatusError(
+          this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    }
+    return propertyValue;
   }
 
   // Update the vacuum's state and make sure the change is reflected in Homekit.
   private async setDeviceState(active: boolean) {
     Log.debug(`Setting vacuum state to ${active ? 'active' : 'inactive'}`);
-    await this.rrClient.sendCommand(
-        active ? await PyRoborockCmd.APP_START :
-                 await PyRoborockCmd.APP_CHARGE);
+    if (!await this.rrClient.sendCommand(
+            active ? await PyRoborockCmd.APP_START :
+                     await PyRoborockCmd.APP_CHARGE)) {
+      throw new this.platform.api.hap.HapStatusError(
+          this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    }
     this.refreshDeviceState();
   }
 
@@ -104,7 +124,12 @@ export class RoborockAccessory extends PollingAccessory<DeviceState> {
 
   // Obtain and return the device's current state.
   protected async getDeviceState(lastState: DeviceState): Promise<DeviceState> {
+    // If we don't get a response, set the device state to empty.
     const rawDeviceState = await this.rrClient.getStatus();
+    if (!rawDeviceState) {
+      return <DeviceState>{};
+    }
+    // Otherwise, build the new device state from the response.
     const devState = <DeviceState>{
       [kVacuumState]: await rawDeviceState[kVacuumState],
       [kFanPower]: await rawDeviceState[kFanPower],

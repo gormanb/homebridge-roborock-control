@@ -110,6 +110,7 @@ export class RoborockControllerPlatform implements DynamicPlatformPlugin {
     // Write the user data out to persistent storage.
     writeUserData(this.api, rrSession);
 
+    // Returns an array of HomeDataDevice as defined in containers.py.
     const deviceList = await rrSession.home_data.get_all_devices();
     Log.debug('Discovered devices:', deviceList);
 

@@ -38,7 +38,7 @@ enum ProtocolVersion {
   A01 = 'A01'
 }
 
-// For a given device, retrieve the corresponding product catalog entry.
+// For a given device, retrieve the corresponding HomeDataProduct entry.
 export async function getProductForDevice(device: any, rrSession: any) {
   const productId = await device.product_id;
   for await (const product of await rrSession.home_data.products) {
@@ -103,12 +103,19 @@ export async function startRoborockSession(
 export class RoborockDeviceClient {
   constructor(private readonly rrRawClient: any) {}
 
+  // Returns an object of type Status as defined in containers.py.
   public async getStatus() {
     return await this.sendCommand(await PyRoborockCmd.GET_STATUS);
   }
 
   public async sendCommand(cmd: string, args?: any) {
-    return await pyasyncio.run(await this.rrRawClient._send_command(cmd, args));
+    try {
+      return await pyasyncio.run(
+          await this.rrRawClient._send_command(cmd, args));
+    } catch (ex) {
+      Log.debug(`Error while sending command ${cmd}:`, ex);
+      return null;
+    }
   }
 }
 
