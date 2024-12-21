@@ -29,7 +29,13 @@
     "postinstall": "python3 -m pip install python-roborock~=2.6.0 --target pylib --upgrade"
   },
   "keywords": [
-    "homebridge-plugin"
+    "homebridge-plugin",
+    "homekit",
+    "roborock",
+    "robot",
+    "vacuum",
+    "roomba",
+    "smart home"
   ],
   "dependencies": {
     "enquirer": "^2.4.1",
