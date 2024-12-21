@@ -1,7 +1,7 @@
 {
   "displayName": "Homebridge Roborock Control",
   "name": "homebridge-roborock-control",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A Homebridge plugin to control Roborock vacuum cleaners.",
   "license": "Apache-2.0",
   "type": "module",
