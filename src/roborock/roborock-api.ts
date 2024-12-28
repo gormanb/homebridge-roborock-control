@@ -16,7 +16,8 @@ process.on('exit', () => python.exit());
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Append the 'pylib' path to the python search path.
-await (await python('sys')).path.append(join(__dirname, '..', '..', 'pylib'));
+const pylibDir = join(__dirname, '..', '..', 'pylib');
+await (await python('sys')).path.insert(0, pylibDir);
 
 // Load asyncio and roborock packages via the python bridge.
 export const pyasyncio = await python('asyncio');
