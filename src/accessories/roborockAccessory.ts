@@ -127,6 +127,7 @@ export class RoborockAccessory extends PollingAccessory<DeviceState> {
     // If we don't get a response, set the device state to empty.
     const rawDeviceState = await this.rrClient.getStatus();
     if (!rawDeviceState) {
+      Log.debug('No response from device, returning empty state');
       return <DeviceState>{};
     }
     // Otherwise, build the new device state from the response.
@@ -146,6 +147,13 @@ export class RoborockAccessory extends PollingAccessory<DeviceState> {
 
   // Push the current state to Homekit.
   protected async updateHomekitState(currentState: DeviceState) {
+    // Don't try to push an update if the device state is empty. This signifies
+    // that the most recent attempt to retrieve the device state failed.
+    if (JSON.stringify(currentState) === JSON.stringify(<DeviceState>{})) {
+      Log.debug('Empty device state, skipping Homekit push update');
+      return;
+    }
+    // Otherwise, update each of our services.
     this.fanService.updateCharacteristic(
         this.platform.Characteristic.On, currentState[kCleaning]);
     this.batteryService.updateCharacteristic(
